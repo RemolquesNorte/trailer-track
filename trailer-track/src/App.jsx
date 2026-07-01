@@ -251,9 +251,25 @@ export default function TrailerTracker() {
 
   const loadAll = useCallback(async () => {
     try {
+      // Paginate through all trailers (Supabase default limit is 1000)
+      async function fetchAll(table, order) {
+        const PAGE = 1000;
+        let rows = [], from = 0;
+        while (true) {
+          const batch = await fetch(
+            `${SUPABASE_URL}/rest/v1/${table}?select=*&order=${order}&offset=${from}&limit=${PAGE}`,
+            { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json", Prefer: "count=none" } }
+          ).then(r => r.json());
+          rows = rows.concat(batch || []);
+          if (!batch || batch.length < PAGE) break;
+          from += PAGE;
+        }
+        return rows;
+      }
+
       const [tRows, hRows] = await Promise.all([
-        sb("trailers?select=*&order=created_at.desc"),
-        sb("trailer_history?select=*&order=timestamp.asc"),
+        fetchAll("trailers", "created_at.desc"),
+        fetchAll("trailer_history", "timestamp.asc"),
       ]);
       setTrailers(tRows || []);
       const map = {};
