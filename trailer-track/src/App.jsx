@@ -199,13 +199,17 @@ export default function TrailerTracker() {
   }
 
   // ── Import from Google Sheets paste ─────────────────────────────────────
+  function stripAsterisks(val) {
+    return val?.replace(/\*/g, "").trim() || "";
+  }
+
   function parseImport(text) {
     const rows = text.trim().split("\n").slice(2); // skip rows 1 & 2 (header rows)
     const parsed = [];
     for (const row of rows) {
-      const cols = row.split("\t");
-      const model = cols[0]?.trim();
-      const vin   = cols[1]?.trim().toUpperCase();
+      const cols  = row.split("\t");
+      const model = stripAsterisks(cols[0]);
+      const vin   = stripAsterisks(cols[1]).toUpperCase();
       if (!vin || vin.length < 3) continue; // skip empty rows
       const existing = trailers.find(t => t.vin === vin);
       parsed.push({ model, vin, exists: !!existing });
@@ -229,19 +233,31 @@ export default function TrailerTracker() {
     setSaving(true);
     setImportResult(null);
     try {
-      // Insert all trailers at once
-      await sb("trailers", {
-        method: "POST",
-        prefer: "return=minimal",
-        headers: { Prefer: "resolution=ignore-duplicates" },
-        body: JSON.stringify(toAdd.map(r => ({ vin: r.vin, type: r.model, notes: "" }))),
-      });
-      // Insert history entries one by one (bulk insert for history)
-      await sb("trailer_history", {
-        method: "POST",
-        prefer: "return=minimal",
-        body: JSON.stringify(toAdd.map(r => ({ vin: r.vin, station: "registered" }))),
-      });
+      // Insert in chunks of 100 to avoid request size limits
+      const CHUNK = 100;
+      for (let i = 0; i < toAdd.length; i += CHUNK) {
+        const chunk = toAdd.slice(i, i + CHUNK);
+        await fetch(`${SUPABASE_URL}/rest/v1/trailers`, {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=ignore-duplicates,return=minimal",
+          },
+          body: JSON.stringify(chunk.map(r => ({ vin: r.vin, type: r.model, notes: "" }))),
+        });
+        await fetch(`${SUPABASE_URL}/rest/v1/trailer_history`, {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify(chunk.map(r => ({ vin: r.vin, station: "registered" }))),
+        });
+      }
       await loadAll();
       setImportResult({ success: true, message: `✅ ${toAdd.length} trailer${toAdd.length > 1 ? "s" : ""} imported successfully!` });
       setImportText("");
