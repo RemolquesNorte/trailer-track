@@ -88,6 +88,9 @@ export default function TrailerTracker() {
   const [filterStation, setFilterStation] = useState("all");
   const [search, setSearch]         = useState("");
   const [saving, setSaving]         = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importPreview, setImportPreview] = useState([]); // [{vin, type, status}]
+  const [importResult, setImportResult] = useState(null);
 
   // ── DB setup check ──────────────────────────────────────────────────────
   async function setupDatabase() {
@@ -195,6 +198,61 @@ export default function TrailerTracker() {
     }
   }
 
+  // ── Import from Google Sheets paste ─────────────────────────────────────
+  function parseImport(text) {
+    const rows = text.trim().split("\n").slice(2); // skip rows 1 & 2 (header rows)
+    const parsed = [];
+    for (const row of rows) {
+      const cols = row.split("\t");
+      const model = cols[0]?.trim();
+      const vin   = cols[1]?.trim().toUpperCase();
+      if (!vin || vin.length < 3) continue; // skip empty rows
+      const existing = trailers.find(t => t.vin === vin);
+      parsed.push({ model, vin, exists: !!existing });
+    }
+    return parsed;
+  }
+
+  function handleImportPaste(text) {
+    setImportText(text);
+    setImportResult(null);
+    if (!text.trim()) { setImportPreview([]); return; }
+    setImportPreview(parseImport(text));
+  }
+
+  async function handleImportSave() {
+    const toAdd = importPreview.filter(r => !r.exists);
+    if (toAdd.length === 0) {
+      setImportResult({ success: false, message: "No new trailers to import — all VINs already exist." });
+      return;
+    }
+    setSaving(true);
+    setImportResult(null);
+    try {
+      // Insert all trailers at once
+      await sb("trailers", {
+        method: "POST",
+        prefer: "return=minimal",
+        headers: { Prefer: "resolution=ignore-duplicates" },
+        body: JSON.stringify(toAdd.map(r => ({ vin: r.vin, type: r.model, notes: "" }))),
+      });
+      // Insert history entries one by one (bulk insert for history)
+      await sb("trailer_history", {
+        method: "POST",
+        prefer: "return=minimal",
+        body: JSON.stringify(toAdd.map(r => ({ vin: r.vin, station: "registered" }))),
+      });
+      await loadAll();
+      setImportResult({ success: true, message: `✅ ${toAdd.length} trailer${toAdd.length > 1 ? "s" : ""} imported successfully!` });
+      setImportText("");
+      setImportPreview([]);
+    } catch (err) {
+      setImportResult({ success: false, message: "Error importing: " + err.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // ── Derived ─────────────────────────────────────────────────────────────
   function stationIdx(trailer) {
     if (!trailer.current_station) return -1;
@@ -281,7 +339,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
       <div style={S.header}>
         <div style={S.logo}><span style={{ fontSize: 22 }}>🚛</span> TRAILER TRACK</div>
         <nav style={S.nav}>
-          {[["dashboard","Dashboard"],["scan","Scan VIN"],["add","Register Trailer"]].map(([id, label]) => (
+          {[["dashboard","Dashboard"],["scan","Scan VIN"],["add","Register Trailer"],["import","Import Sheet"]].map(([id, label]) => (
             <button key={id} style={S.navBtn(view === id || (view === "detail" && id === "dashboard"))} onClick={() => setView(id)}>{label}</button>
           ))}
         </nav>
@@ -501,6 +559,81 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                 );
               })}
               {detailHistory.length === 0 && <div style={{ color: "#8FA0B0", fontSize: 14 }}>No history yet.</div>}
+            </div>
+          </div>
+        )}
+
+        {/* ── IMPORT ── */}
+        {view === "import" && (
+          <div style={{ maxWidth: 700 }}>
+            <h2 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800 }}>Import from Google Sheets</h2>
+            <p style={{ margin: "0 0 24px", color: "#8FA0B0", fontSize: 14 }}>
+              Select all cells in your Google Sheet (Ctrl+A), copy (Ctrl+C), then paste below.
+            </p>
+
+            <div style={S.card}>
+              {/* Instructions */}
+              <div style={{ background: "#0F1923", borderRadius: 8, padding: "12px 16px", marginBottom: 16, border: "1px solid #1E3048", fontSize: 13, color: "#8FA0B0", lineHeight: 1.8 }}>
+                <strong style={{ color: "#E8EDF2" }}>Expected format:</strong> Column A = Model, Column B = VIN, starting from row 3.
+                Rows 1 and 2 are skipped automatically.
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ ...S.label, marginBottom: 8 }}>Paste your Google Sheet data here</div>
+                <textarea
+                  style={{ ...S.input, height: 140, resize: "vertical", fontFamily: "monospace", fontSize: 13 }}
+                  placeholder={"Paste your copied Google Sheets data here…\n\nExample (after pasting):\nModel\tVIN\nHorse Trailer\t1HGCM82633A123456\nFlatbed\t2FMDK3KC5BB123456"}
+                  value={importText}
+                  onChange={e => handleImportPaste(e.target.value)}
+                />
+              </div>
+
+              {/* Preview table */}
+              {importPreview.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ ...S.label, marginBottom: 10 }}>
+                    Preview — {importPreview.filter(r => !r.exists).length} new · {importPreview.filter(r => r.exists).length} already exist
+                  </div>
+                  <div style={{ maxHeight: 280, overflowY: "auto", border: "1px solid #1E3048", borderRadius: 8 }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: "#0F1923", position: "sticky", top: 0 }}>
+                          <th style={{ padding: "8px 12px", textAlign: "left", color: "#8FA0B0", fontWeight: 700, fontSize: 11, textTransform: "uppercase" }}>Model</th>
+                          <th style={{ padding: "8px 12px", textAlign: "left", color: "#8FA0B0", fontWeight: 700, fontSize: 11, textTransform: "uppercase" }}>VIN</th>
+                          <th style={{ padding: "8px 12px", textAlign: "left", color: "#8FA0B0", fontWeight: 700, fontSize: 11, textTransform: "uppercase" }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importPreview.map((row, i) => (
+                          <tr key={i} style={{ borderTop: "1px solid #1E3048", opacity: row.exists ? 0.5 : 1 }}>
+                            <td style={{ padding: "8px 12px", color: "#E8EDF2" }}>{row.model || "—"}</td>
+                            <td style={{ padding: "8px 12px", fontFamily: "monospace", color: "#E8EDF2", letterSpacing: 1 }}>{row.vin}</td>
+                            <td style={{ padding: "8px 12px" }}>
+                              {row.exists
+                                ? <span style={S.pill("#8FA0B0")}>Already exists</span>
+                                : <span style={S.pill("#27AE60")}>✓ Will import</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {importPreview.length > 0 && (
+                <button
+                  style={{ ...S.btn("primary"), width: "100%", padding: "12px", opacity: saving ? 0.6 : 1 }}
+                  onClick={handleImportSave}
+                  disabled={saving || importPreview.filter(r => !r.exists).length === 0}
+                >
+                  {saving ? "Importing…" : `Import ${importPreview.filter(r => !r.exists).length} New Trailers →`}
+                </button>
+              )}
+
+              {importResult && (
+                <div style={S.result(importResult.success)}>{importResult.message}</div>
+              )}
             </div>
           </div>
         )}
