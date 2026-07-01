@@ -5,19 +5,20 @@ const SUPABASE_URL = "https://dhksanhrzjiwtultfetp.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_pByYqUdxfQbGtL9LNOpIog_xQ3GgRQz";
 
 async function sb(path, options = {}) {
+  const { prefer, headers: extraHeaders, ...fetchOptions } = options;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: {
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       "Content-Type": "application/json",
-      Prefer: options.prefer || "",
-      ...options.headers,
+      ...(prefer ? { Prefer: prefer } : {}),
+      ...extraHeaders,
     },
-    ...options,
+    ...fetchOptions,
   });
   if (!res.ok) { const err = await res.text(); throw new Error(err); }
-  if (res.status === 204) return null;
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 // ── PIN config — change these to your own PINs ───────────────────────────────
