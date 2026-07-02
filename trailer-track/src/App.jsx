@@ -521,6 +521,10 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
     const ms = !activeStation || t.current_station === activeStation;
     const mq = !search || t.vin.includes(search.toUpperCase()) || t.type?.toLowerCase().includes(search.toLowerCase());
     return ms && mq;
+  }).sort((a, b) => {
+    const numA = parseInt(a.vin.slice(-6), 10) || 0;
+    const numB = parseInt(b.vin.slice(-6), 10) || 0;
+    return numB - numA; // highest last-6 digits first
   });
 
   const visibleVins      = dashboardTrailers.map(t => t.vin);
