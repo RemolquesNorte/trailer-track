@@ -465,11 +465,11 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
 
   // ── Import ──────────────────────────────────────────────────────────────────
   function parseImport(text) {
-    return text.trim().split("\n").slice(2).map(row => {
+    return text.split("\n").map(row => {
       const cols  = row.split("\t");
       const model = stripAsterisks(cols[0]);
       const vin   = stripAsterisks(cols[1]).toUpperCase();
-      if (!vin || vin.length < 3) return null;
+      if (!vin || vin.length < 3) return null; // skips empty rows and header rows automatically
       return { model, vin, exists: !!trailers.find(t => t.vin === vin) };
     }).filter(Boolean);
   }
