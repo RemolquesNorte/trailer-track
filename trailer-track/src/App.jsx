@@ -22,6 +22,7 @@ async function sb(path, options = {}) {
 
 const PINS = {
   "0000": { role: "admin" },
+  "1234": { role: "viewer" },
   "1111": { role: "station", station: "cutting" },
   "2222": { role: "station", station: "welding" },
   "3333": { role: "station", station: "framing" },
@@ -325,6 +326,7 @@ export default function TrailerTracker() {
 
   if (!session) return <LoginScreen onLogin={setSession} />;
   if (session.role === "station") return <WorkerScanScreen station={session.station} onLogout={() => setSession(null)} trailers={trailers} loadAll={loadAll} />;
+  const isViewer = session.role === "viewer";
 
   if (dbReady === false) return (
     <div style={S.app}>
@@ -558,7 +560,9 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
         <div style={S.logo}><span style={{ fontSize: 22 }}>🚛</span> TRAILER TRACK</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <nav style={S.nav}>
-            {[["dashboard","Dashboard"],["all","All VINs"],["scan","Scan VIN"],["add","Register"],["import","Import Sheet"]].map(([id, label]) => (
+            {[["dashboard","Dashboard"],["all","All VINs"],["scan","Scan VIN"],["add","Register"],["import","Import Sheet"]]
+              .filter(([id]) => isViewer ? !["scan","add","import"].includes(id) : true)
+              .map(([id, label]) => (
               <button key={id} style={S.navBtn(view === id || (view === "detail" && id === "dashboard"))}
                 onClick={() => { setView(id); setActiveStation(id === "all" ? "all" : null); setSelected(new Set()); }}>{label}</button>
             ))}
@@ -620,7 +624,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
               </div>
 
               {/* Bulk action bar */}
-              {selected.size > 0 && (
+              {!isViewer && selected.size > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#FF6B3511", border: "1px solid #FF6B3544", borderRadius: 8, marginBottom: 14 }}>
                   <span style={{ fontWeight: 700, color: "#FF6B35", fontSize: 14 }}>{selected.size} selected</span>
                   <button style={{ ...S.btn("danger"), padding: "6px 14px", fontSize: 13 }} onClick={() => setConfirmDelete(true)}>
@@ -633,7 +637,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
               )}
 
               {/* Select all row */}
-              {showList && dashboardTrailers.length > 0 && (
+              {!isViewer && showList && dashboardTrailers.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "2px solid #1E3048", marginBottom: 4 }}>
                   <input type="checkbox" style={S.checkbox} checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleVins)}
                     ref={el => { if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected; }} />
@@ -660,8 +664,8 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                 return (
                   <div key={trailer.vin} style={{ ...S.row, background: isSel ? "#FF6B3508" : "transparent", borderRadius: isSel ? 6 : 0 }}>
                     {/* Checkbox */}
-                    <input type="checkbox" style={{ ...S.checkbox, marginRight: 10 }} checked={isSel}
-                      onChange={() => toggleSelect(trailer.vin)} onClick={e => e.stopPropagation()} />
+                    {!isViewer && <input type="checkbox" style={{ ...S.checkbox, marginRight: 10 }} checked={isSel}
+                      onChange={() => toggleSelect(trailer.vin)} onClick={e => e.stopPropagation()} />}
 
                     {/* Info — clickable to detail */}
                     <div style={{ flex: 1, cursor: "pointer" }} onClick={() => { setSelectedVin(trailer.vin); setView("detail"); }}>
@@ -676,16 +680,16 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                     </div>
 
                     {/* Edit button */}
+                    {!isViewer && <>
                     <button style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, marginLeft: 10, whiteSpace: "nowrap" }}
                       onClick={e => { e.stopPropagation(); setEditTrailer(trailer); }}>
                       ✏️ Edit
                     </button>
-
-                    {/* Delete single */}
                     <button style={{ ...S.btn("danger"), padding: "6px 12px", fontSize: 12, marginLeft: 6, whiteSpace: "nowrap" }}
                       onClick={e => { e.stopPropagation(); setSelected(new Set([trailer.vin])); setConfirmDelete(true); }}>
                       🗑
                     </button>
+                    </>}
                   </div>
                 );
               })}
@@ -709,7 +713,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                 <input style={{ ...S.input, flex: 1 }} placeholder="Search VIN or model…" value={search} onChange={e => setSearch(e.target.value)} />
               </div>
 
-              {selected.size > 0 && (
+              {!isViewer && selected.size > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#FF6B3511", border: "1px solid #FF6B3544", borderRadius: 8, marginBottom: 14 }}>
                   <span style={{ fontWeight: 700, color: "#FF6B35", fontSize: 14 }}>{selected.size} selected</span>
                   <button style={{ ...S.btn("danger"), padding: "6px 14px", fontSize: 13 }} onClick={() => setConfirmDelete(true)}>
@@ -719,7 +723,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                 </div>
               )}
 
-              {dashboardTrailers.length > 0 && (
+              {!isViewer && dashboardTrailers.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "2px solid #1E3048", marginBottom: 4 }}>
                   <input type="checkbox" style={S.checkbox}
                     checked={dashboardTrailers.length > 0 && dashboardTrailers.every(t => selected.has(t.vin))}
@@ -737,8 +741,8 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                 const isSel = selected.has(trailer.vin);
                 return (
                   <div key={trailer.vin} style={{ ...S.row, background: isSel ? "#FF6B3508" : "transparent", borderRadius: isSel ? 6 : 0 }}>
-                    <input type="checkbox" style={{ ...S.checkbox, marginRight: 10 }} checked={isSel}
-                      onChange={() => toggleSelect(trailer.vin)} onClick={e => e.stopPropagation()} />
+                    {!isViewer && <input type="checkbox" style={{ ...S.checkbox, marginRight: 10 }} checked={isSel}
+                      onChange={() => toggleSelect(trailer.vin)} onClick={e => e.stopPropagation()} />}
                     <div style={{ flex: 1, cursor: "pointer" }} onClick={() => { setSelectedVin(trailer.vin); setView("detail"); }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
                         <span style={{ fontWeight: 800, fontFamily: "monospace", fontSize: 15, letterSpacing: 1 }}>{trailer.vin}</span>
@@ -749,10 +753,12 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                         {STATIONS.map((s, i) => <div key={s.id} style={S.step(i <= idx, s.color)} />)}
                       </div>
                     </div>
+                    {!isViewer && <>
                     <button style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, marginLeft: 10 }}
                       onClick={e => { e.stopPropagation(); setEditTrailer(trailer); }}>✏️ Edit</button>
                     <button style={{ ...S.btn("danger"), padding: "6px 12px", fontSize: 12, marginLeft: 6 }}
                       onClick={e => { e.stopPropagation(); setSelected(new Set([trailer.vin])); setConfirmDelete(true); }}>🗑</button>
+                    </>}
                   </div>
                 );
               })}
@@ -877,9 +883,11 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
               <button style={{ ...S.btn("ghost"), padding: "4px 0", fontSize: 13 }} onClick={() => setView("dashboard")}>← Back</button>
               <div style={{ flex: 1 }} />
+              {!isViewer && <>
               <button style={{ ...S.btn("secondary"), padding: "8px 16px", fontSize: 13 }} onClick={() => setEditTrailer(detailTrailer)}>✏️ Edit</button>
               <button style={{ ...S.btn("danger"), padding: "8px 16px", fontSize: 13 }}
                 onClick={() => { setSelected(new Set([detailTrailer.vin])); setConfirmDelete(true); }}>🗑 Delete</button>
+              </>}
             </div>
 
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
