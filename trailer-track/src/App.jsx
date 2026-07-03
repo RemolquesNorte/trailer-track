@@ -319,7 +319,7 @@ export default function TrailerTracker() {
   useEffect(() => { loadAll(); }, [loadAll]);
   useEffect(() => {
     if (!dbReady) return;
-    const id = setInterval(loadAll, 8000);
+    const id = setInterval(loadAll, 30000);
     return () => clearInterval(id);
   }, [dbReady, loadAll]);
 
@@ -517,15 +517,18 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
     return acc;
   }, {});
 
-  const dashboardTrailers = trailers.filter(t => {
+  // Only show trailer list when a station is selected OR user is searching
+  const showList = !!activeStation || search.length > 0;
+
+  const dashboardTrailers = showList ? trailers.filter(t => {
     const ms = !activeStation || t.current_station === activeStation;
     const mq = !search || t.vin.includes(search.toUpperCase()) || t.type?.toLowerCase().includes(search.toLowerCase());
     return ms && mq;
   }).sort((a, b) => {
     const numA = parseInt(a.vin.slice(-6), 10) || 0;
     const numB = parseInt(b.vin.slice(-6), 10) || 0;
-    return numB - numA; // highest last-6 digits first
-  });
+    return numB - numA;
+  }) : [];
 
   const visibleVins      = dashboardTrailers.map(t => t.vin);
   const allVisibleSelected = visibleVins.length > 0 && visibleVins.every(v => selected.has(v));
@@ -623,7 +626,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
               )}
 
               {/* Select all row */}
-              {dashboardTrailers.length > 0 && (
+              {showList && dashboardTrailers.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "2px solid #1E3048", marginBottom: 4 }}>
                   <input type="checkbox" style={S.checkbox} checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleVins)}
                     ref={el => { if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected; }} />
@@ -633,7 +636,13 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                 </div>
               )}
 
-              {dashboardTrailers.length === 0 ? (
+              {!showList ? (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#8FA0B0" }}>
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>☝️</div>
+                  <div style={{ fontWeight: 600, marginBottom: 6, color: "#E8EDF2" }}>Click a station above to see its trailers</div>
+                  <div style={{ fontSize: 13 }}>Or use the search bar to find a specific VIN or model</div>
+                </div>
+              ) : dashboardTrailers.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: "#8FA0B0" }}>
                   {trailers.length === 0 ? "No trailers yet. Register one to get started." : "No trailers match this filter."}
                 </div>
