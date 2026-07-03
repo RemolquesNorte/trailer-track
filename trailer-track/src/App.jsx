@@ -529,7 +529,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
   }
 
   const stationCounts = STATIONS.reduce((acc, s) => {
-    acc[s.id] = trailers.filter(t => t.current_station === s.id).length;
+    acc[s.id] = trailers.filter(t => t.current_station === s.id && t.current_station !== "shipped").length;
     return acc;
   }, {});
 
@@ -538,7 +538,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
 
   const dashboardTrailers = (() => {
     if (!showList) return [];
-    let list = trailers;
+    let list = trailers.filter(t => t.current_station !== "shipped"); // exclude shipped from production views
     // Apply station filter first (ignore if searching without a station)
     if (activeStation && activeStation !== "all") {
       list = list.filter(t => t.current_station === activeStation);
@@ -574,7 +574,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
         <div style={S.logo}><span style={{ fontSize: 22 }}>🚛</span> TRAILER TRACK</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <nav style={S.nav}>
-            {[["dashboard","Dashboard"],["all","All VINs"],["scan","Scan VIN"],["add","Register"],["import","Import Sheet"]]
+            {[["dashboard","Dashboard"],["all","All VINs"],["shipped","Shipped"],["scan","Scan VIN"],["add","Register"],["import","Import Sheet"]]
               .filter(([id]) => isViewer ? !["scan","add","import"].includes(id) : true)
               .map(([id, label]) => (
               <button key={id} style={S.navBtn(view === id || (view === "detail" && id === "dashboard"))}
@@ -602,7 +602,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
             <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
               {[
                 ["Total", trailers.length, "#FF6B35"],
-                ["In Production", trailers.filter(t => t.current_station && t.current_station !== "ready").length, "#27AE60"],
+                ["In Production", trailers.filter(t => t.current_station && t.current_station !== "ready" && t.current_station !== "shipped").length, "#27AE60"],
                 ["Ready", trailers.filter(t => t.current_station === "ready").length, "#16A085"],
                 ["Not Started", trailers.filter(t => !t.current_station).length, "#8FA0B0"],
               ].map(([label, val, color]) => (
@@ -776,6 +776,115 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* ── SHIPPED ── */}
+        {view === "shipped" && (
+          <div style={{ maxWidth: 620 }}>
+            <div style={{ marginBottom: 24 }}>
+              <h2 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800 }}>🚚 Shipped</h2>
+              <p style={{ margin: 0, color: "#8FA0B0", fontSize: 14 }}>
+                Scan or enter a VIN to mark it as shipped. It will be removed from production but kept in the system.
+              </p>
+            </div>
+
+            {/* Scan input */}
+            {!isViewer && (
+              <div style={{ ...S.card, marginBottom: 24 }}>
+                <div style={{ ...S.label, marginBottom: 8 }}>VIN Number</div>
+                <input
+                  style={{ ...S.input, fontSize: 18, fontFamily: "monospace", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}
+                  placeholder="Scan or type VIN…"
+                  value={scanInput}
+                  onChange={e => { setScanInput(e.target.value); setScanResult(null); }}
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === "Enter") {
+                      const vin = scanInput.trim().toUpperCase();
+                      if (!vin) return;
+                      const trailer = trailers.find(t => t.vin === vin);
+                      if (!trailer) { setScanResult({ success: false, message: `VIN ${vin} not found.` }); return; }
+                      if (trailer.current_station === "shipped") { setScanResult({ success: false, message: `${vin} is already marked as shipped.` }); return; }
+                      setSaving(true);
+                      Promise.all([
+                        sb("trailers?vin=eq." + vin, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ current_station: "shipped" }) }),
+                        sb("trailer_history", { method: "POST", prefer: "return=minimal", body: JSON.stringify({ vin, station: "shipped" }) }),
+                      ]).then(() => loadAll()).then(() => {
+                        setScanResult({ success: true, message: `✅ ${trailer.type} — ${vin} marked as shipped.` });
+                        setScanInput("");
+                      }).catch(err => setScanResult({ success: false, message: "Error: " + err.message }))
+                        .finally(() => setSaving(false));
+                    }
+                  }}
+                />
+                <button
+                  style={{ ...S.btn("primary"), width: "100%", padding: "12px", opacity: saving ? 0.6 : 1 }}
+                  disabled={saving}
+                  onClick={async () => {
+                    const vin = scanInput.trim().toUpperCase();
+                    if (!vin) return;
+                    const trailer = trailers.find(t => t.vin === vin);
+                    if (!trailer) { setScanResult({ success: false, message: `VIN ${vin} not found.` }); return; }
+                    if (trailer.current_station === "shipped") { setScanResult({ success: false, message: `${vin} is already marked as shipped.` }); return; }
+                    setSaving(true);
+                    try {
+                      await sb("trailers?vin=eq." + vin, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ current_station: "shipped" }) });
+                      await sb("trailer_history", { method: "POST", prefer: "return=minimal", body: JSON.stringify({ vin, station: "shipped" }) });
+                      await loadAll();
+                      setScanResult({ success: true, message: `✅ ${trailer.type} — ${vin} marked as shipped.` });
+                      setScanInput("");
+                    } catch (err) { setScanResult({ success: false, message: "Error: " + err.message }); }
+                    finally { setSaving(false); }
+                  }}
+                >
+                  {saving ? "Saving…" : "Mark as Shipped →"}
+                </button>
+                {scanResult && <div style={S.result(scanResult.success)}>{scanResult.message}</div>}
+              </div>
+            )}
+
+            {/* Shipped trailers list */}
+            <div style={S.card}>
+              <div style={{ ...S.label, marginBottom: 14 }}>
+                Shipped Trailers — {trailers.filter(t => t.current_station === "shipped").length} total
+              </div>
+              {trailers.filter(t => t.current_station === "shipped")
+                .sort((a, b) => (parseInt(b.vin.slice(-6)) || 0) - (parseInt(a.vin.slice(-6)) || 0))
+                .map(trailer => (
+                  <div key={trailer.vin} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #1E3048" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontFamily: "monospace", fontWeight: 800, fontSize: 14, letterSpacing: 1 }}>{trailer.vin}</span>
+                        <span style={S.pill("#2980B9")}>🚚 Shipped</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: "#8FA0B0", marginTop: 3 }}>{trailer.type}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {/* Undo — move back to Ready */}
+                      {!isViewer && (
+                        <button style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12 }}
+                          onClick={async () => {
+                            try {
+                              await sb("trailers?vin=eq." + trailer.vin, { method: "PATCH", prefer: "return=minimal", body: JSON.stringify({ current_station: "ready" }) });
+                              await sb("trailer_history", { method: "POST", prefer: "return=minimal", body: JSON.stringify({ vin: trailer.vin, station: "ready" }) });
+                              await loadAll();
+                            } catch (err) { alert("Error: " + err.message); }
+                          }}>
+                          ↩ Undo
+                        </button>
+                      )}
+                      <button style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 12 }}
+                        onClick={() => { setSelectedVin(trailer.vin); setView("detail"); }}>
+                        View →
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              {trailers.filter(t => t.current_station === "shipped").length === 0 && (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#8FA0B0" }}>No trailers shipped yet.</div>
+              )}
             </div>
           </div>
         )}
@@ -964,4 +1073,3 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
     </div>
   );
 }
-
