@@ -517,21 +517,28 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
     return acc;
   }, {});
 
-  // activeStation: null = nothing selected yet, "all" = show all, "cutting" etc = station filter
+  // activeStation: null = nothing selected, "all" = show all, anything else = exact station match
   const showList = activeStation !== null || search.length > 0;
 
-  const dashboardTrailers = showList ? trailers.filter(t => {
-    if (search) {
-      const mq = t.vin.includes(search.toUpperCase()) || t.type?.toLowerCase().includes(search.toLowerCase());
-      if (!mq) return false;
+  const dashboardTrailers = (() => {
+    if (!showList) return [];
+    let list = trailers;
+    // Apply station filter first (ignore if searching without a station)
+    if (activeStation && activeStation !== "all") {
+      list = list.filter(t => t.current_station === activeStation);
     }
-    if (activeStation === "all" || activeStation === null) return true;
-    return t.current_station === activeStation;
-  }).sort((a, b) => {
-    const numA = parseInt(a.vin.slice(-6), 10) || 0;
-    const numB = parseInt(b.vin.slice(-6), 10) || 0;
-    return numB - numA;
-  }) : [];
+    // Apply search filter on top
+    if (search) {
+      const q = search.toUpperCase();
+      list = list.filter(t => t.vin.includes(q) || t.type?.toLowerCase().includes(search.toLowerCase()));
+    }
+    // Sort by last 6 digits descending
+    return list.slice().sort((a, b) => {
+      const numA = parseInt(a.vin.slice(-6), 10) || 0;
+      const numB = parseInt(b.vin.slice(-6), 10) || 0;
+      return numB - numA;
+    });
+  })();
 
   const visibleVins      = dashboardTrailers.map(t => t.vin);
   const allVisibleSelected = visibleVins.length > 0 && visibleVins.every(v => selected.has(v));
