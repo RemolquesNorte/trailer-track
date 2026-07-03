@@ -522,7 +522,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
   const showList = activeStation !== null || search.length > 0;
 
   const dashboardTrailers = showList ? trailers.filter(t => {
-    const ms = !activeStation || activeStation === "all" || t.current_station === activeStation;
+    const ms = activeStation === "all" ? true : t.current_station === activeStation;
     const mq = !search || t.vin.includes(search.toUpperCase()) || t.type?.toLowerCase().includes(search.toLowerCase());
     return ms && mq;
   }).sort((a, b) => {
@@ -595,7 +595,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                   All · {trailers.length}
                 </button>
                 {STATIONS.map(s => (
-                  <button key={s.id} onClick={() => setActiveStation(activeStation === s.id ? null : s.id)}
+                  <button key={s.id} onClick={() => setActiveStation(s.id)}
                     style={{ textAlign: "center", padding: "12px 18px", background: activeStation === s.id ? `${s.color}22` : "#0F1923", borderRadius: 8, border: `2px solid ${activeStation === s.id ? s.color : stationCounts[s.id] ? s.color + "55" : "#1E3048"}`, cursor: "pointer", transition: "all 0.15s", minWidth: 90 }}>
                     <div style={{ fontSize: 20 }}>{s.icon}</div>
                     <div style={{ fontSize: 11, color: "#8FA0B0", marginTop: 2 }}>{s.label}</div>
