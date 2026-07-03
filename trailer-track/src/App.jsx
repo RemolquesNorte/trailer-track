@@ -558,9 +558,9 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
         <div style={S.logo}><span style={{ fontSize: 22 }}>🚛</span> TRAILER TRACK</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <nav style={S.nav}>
-            {[["dashboard","Dashboard"],["scan","Scan VIN"],["add","Register"],["import","Import Sheet"]].map(([id, label]) => (
+            {[["dashboard","Dashboard"],["all","All VINs"],["scan","Scan VIN"],["add","Register"],["import","Import Sheet"]].map(([id, label]) => (
               <button key={id} style={S.navBtn(view === id || (view === "detail" && id === "dashboard"))}
-                onClick={() => { setView(id); setActiveStation(null); setSelected(new Set()); }}>{label}</button>
+                onClick={() => { setView(id); setActiveStation(id === "all" ? "all" : null); setSelected(new Set()); }}>{label}</button>
             ))}
           </nav>
           <button style={{ ...S.btn("ghost"), fontSize: 12, marginLeft: 8 }} onClick={() => setSession(null)}>Lock 🔒</button>
@@ -599,10 +599,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
             <div style={{ ...S.card, marginBottom: 24 }}>
               <div style={{ ...S.label, marginBottom: 14 }}>Stations — click to filter</div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button onClick={() => setActiveStation("all")}
-                  style={{ textAlign: "center", padding: "12px 18px", background: activeStation === "all" ? "#FF6B3522" : "#0F1923", borderRadius: 8, border: `2px solid ${activeStation === "all" ? "#FF6B35" : "#1E3048"}`, cursor: "pointer", color: activeStation === "all" ? "#FF6B35" : "#8FA0B0", fontWeight: 700, fontSize: 13, transition: "all 0.15s" }}>
-                  All · {trailers.length}
-                </button>
+
                 {STATIONS.map(s => (
                   <button key={s.id} onClick={() => setActiveStation(s.id)}
                     style={{ textAlign: "center", padding: "12px 18px", background: activeStation === s.id ? `${s.color}22` : "#0F1923", borderRadius: 8, border: `2px solid ${activeStation === s.id ? s.color : stationCounts[s.id] ? s.color + "55" : "#1E3048"}`, cursor: "pointer", transition: "all 0.15s", minWidth: 90 }}>
@@ -689,6 +686,73 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                       onClick={e => { e.stopPropagation(); setSelected(new Set([trailer.vin])); setConfirmDelete(true); }}>
                       🗑
                     </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── ALL VINs ── */}
+        {view === "all" && (
+          <div>
+            <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <h2 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800 }}>All VINs</h2>
+                <p style={{ margin: 0, color: "#8FA0B0", fontSize: 14 }}>{trailers.length} trailers total</p>
+              </div>
+              <button style={{ ...S.btn("secondary"), fontSize: 12 }} onClick={loadAll}>↻ Refresh</button>
+            </div>
+
+            <div style={S.card}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "center" }}>
+                <input style={{ ...S.input, flex: 1 }} placeholder="Search VIN or model…" value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+
+              {selected.size > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#FF6B3511", border: "1px solid #FF6B3544", borderRadius: 8, marginBottom: 14 }}>
+                  <span style={{ fontWeight: 700, color: "#FF6B35", fontSize: 14 }}>{selected.size} selected</span>
+                  <button style={{ ...S.btn("danger"), padding: "6px 14px", fontSize: 13 }} onClick={() => setConfirmDelete(true)}>
+                    🗑 Delete {selected.size} Trailer{selected.size > 1 ? "s" : ""}
+                  </button>
+                  <button style={{ ...S.btn("ghost"), padding: "6px 14px", fontSize: 13 }} onClick={() => setSelected(new Set())}>Clear selection</button>
+                </div>
+              )}
+
+              {dashboardTrailers.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "2px solid #1E3048", marginBottom: 4 }}>
+                  <input type="checkbox" style={S.checkbox}
+                    checked={dashboardTrailers.length > 0 && dashboardTrailers.every(t => selected.has(t.vin))}
+                    onChange={() => toggleSelectAll(dashboardTrailers.map(t => t.vin))}
+                    ref={el => { if (el) el.indeterminate = dashboardTrailers.some(t => selected.has(t.vin)) && !dashboardTrailers.every(t => selected.has(t.vin)); }} />
+                  <span style={{ fontSize: 12, color: "#8FA0B0", fontWeight: 600 }}>Select all {dashboardTrailers.length} visible</span>
+                </div>
+              )}
+
+              {dashboardTrailers.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#8FA0B0" }}>No trailers match your search.</div>
+              ) : dashboardTrailers.map(trailer => {
+                const idx  = stationIdx(trailer);
+                const st   = STATIONS.find(s => s.id === trailer.current_station);
+                const isSel = selected.has(trailer.vin);
+                return (
+                  <div key={trailer.vin} style={{ ...S.row, background: isSel ? "#FF6B3508" : "transparent", borderRadius: isSel ? 6 : 0 }}>
+                    <input type="checkbox" style={{ ...S.checkbox, marginRight: 10 }} checked={isSel}
+                      onChange={() => toggleSelect(trailer.vin)} onClick={e => e.stopPropagation()} />
+                    <div style={{ flex: 1, cursor: "pointer" }} onClick={() => { setSelectedVin(trailer.vin); setView("detail"); }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 800, fontFamily: "monospace", fontSize: 15, letterSpacing: 1 }}>{trailer.vin}</span>
+                        <span style={S.pill(st?.color || "#8FA0B0")}>{st ? `${st.icon} ${st.label}` : "Not Started"}</span>
+                        <span style={{ fontSize: 12, color: "#8FA0B0" }}>{trailer.type}</span>
+                      </div>
+                      <div style={S.bar}>
+                        {STATIONS.map((s, i) => <div key={s.id} style={S.step(i <= idx, s.color)} />)}
+                      </div>
+                    </div>
+                    <button style={{ ...S.btn("secondary"), padding: "6px 12px", fontSize: 12, marginLeft: 10 }}
+                      onClick={e => { e.stopPropagation(); setEditTrailer(trailer); }}>✏️ Edit</button>
+                    <button style={{ ...S.btn("danger"), padding: "6px 12px", fontSize: 12, marginLeft: 6 }}
+                      onClick={e => { e.stopPropagation(); setSelected(new Set([trailer.vin])); setConfirmDelete(true); }}>🗑</button>
                   </div>
                 );
               })}
