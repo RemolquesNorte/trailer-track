@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 
 const SUPABASE_URL = "https://dhksanhrzjiwtultfetp.supabase.co";
@@ -517,11 +518,12 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
     return acc;
   }, {});
 
-  // Only show trailer list when a station is selected OR user is searching
-  const showList = !!activeStation || search.length > 0;
+  // Only show trailer list when a station is selected, "all" is active, or user is searching
+  // activeStation = null means "no filter chosen yet", "all" means show everything
+  const showList = activeStation !== null || search.length > 0;
 
   const dashboardTrailers = showList ? trailers.filter(t => {
-    const ms = !activeStation || t.current_station === activeStation;
+    const ms = !activeStation || activeStation === "all" || t.current_station === activeStation;
     const mq = !search || t.vin.includes(search.toUpperCase()) || t.type?.toLowerCase().includes(search.toLowerCase());
     return ms && mq;
   }).sort((a, b) => {
@@ -589,8 +591,8 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
             <div style={{ ...S.card, marginBottom: 24 }}>
               <div style={{ ...S.label, marginBottom: 14 }}>Stations — click to filter</div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button onClick={() => setActiveStation(null)}
-                  style={{ textAlign: "center", padding: "12px 18px", background: !activeStation ? "#FF6B3522" : "#0F1923", borderRadius: 8, border: `2px solid ${!activeStation ? "#FF6B35" : "#1E3048"}`, cursor: "pointer", color: !activeStation ? "#FF6B35" : "#8FA0B0", fontWeight: 700, fontSize: 13, transition: "all 0.15s" }}>
+                <button onClick={() => setActiveStation("all")}
+                  style={{ textAlign: "center", padding: "12px 18px", background: activeStation === "all" ? "#FF6B3522" : "#0F1923", borderRadius: 8, border: `2px solid ${activeStation === "all" ? "#FF6B35" : "#1E3048"}`, cursor: "pointer", color: activeStation === "all" ? "#FF6B35" : "#8FA0B0", fontWeight: 700, fontSize: 13, transition: "all 0.15s" }}>
                   All · {trailers.length}
                 </button>
                 {STATIONS.map(s => (
@@ -609,7 +611,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
               {/* Toolbar */}
               <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
                 <input style={{ ...S.input, flex: 1, minWidth: 160 }} placeholder="Search VIN or model…" value={search} onChange={e => setSearch(e.target.value)} />
-                {activeStation && <button style={{ ...S.btn("ghost"), fontSize: 12, whiteSpace: "nowrap" }} onClick={() => setActiveStation(null)}>Clear filter ✕</button>}
+                {activeStation && activeStation !== "all" && <button style={{ ...S.btn("ghost"), fontSize: 12, whiteSpace: "nowrap" }} onClick={() => setActiveStation(null)}>Clear filter ✕</button>}
               </div>
 
               {/* Bulk action bar */}
