@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const SUPABASE_URL = "https://dhksanhrzjiwtultfetp.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_pByYqUdxfQbGtL9LNOpIog_xQ3GgRQz";
@@ -86,6 +86,11 @@ const S = {
 function LoginScreen({ onLogin }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   function handleKey(digit) {
     if (pin.length >= 4) return;
@@ -101,9 +106,18 @@ function LoginScreen({ onLogin }) {
     }
   }
 
+  function handleKeyboard(e) {
+    if (e.key >= "0" && e.key <= "9") { handleKey(e.key); }
+    else if (e.key === "Backspace") { setPin(""); setError(""); }
+  }
+
   const dots = Array.from({ length: 4 }, (_, i) => i < pin.length);
   return (
-    <div style={{ ...S.app, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
+    <div style={{ ...S.app, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}
+      onClick={() => inputRef.current?.focus()}>
+      {/* Hidden input to capture keyboard */}
+      <input ref={inputRef} type="tel" value={pin} onChange={() => {}} onKeyDown={handleKeyboard}
+        style={{ position: "absolute", opacity: 0, pointerEvents: "none", width: 1, height: 1 }} />
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <div style={{ fontSize: 48, marginBottom: 12 }}>🚛</div>
         <div style={{ fontWeight: 800, fontSize: 24, color: "#FF6B35", letterSpacing: 1 }}>TRAILER TRACK</div>
@@ -950,3 +964,4 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
     </div>
   );
 }
+
