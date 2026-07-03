@@ -517,14 +517,16 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
     return acc;
   }, {});
 
-  // Only show trailer list when a station is selected, "all" is active, or user is searching
-  // activeStation = null means "no filter chosen yet", "all" means show everything
+  // activeStation: null = nothing selected yet, "all" = show all, "cutting" etc = station filter
   const showList = activeStation !== null || search.length > 0;
 
   const dashboardTrailers = showList ? trailers.filter(t => {
-    const ms = activeStation === "all" ? true : t.current_station === activeStation;
-    const mq = !search || t.vin.includes(search.toUpperCase()) || t.type?.toLowerCase().includes(search.toLowerCase());
-    return ms && mq;
+    if (search) {
+      const mq = t.vin.includes(search.toUpperCase()) || t.type?.toLowerCase().includes(search.toLowerCase());
+      if (!mq) return false;
+    }
+    if (activeStation === "all" || activeStation === null) return true;
+    return t.current_station === activeStation;
   }).sort((a, b) => {
     const numA = parseInt(a.vin.slice(-6), 10) || 0;
     const numB = parseInt(b.vin.slice(-6), 10) || 0;
