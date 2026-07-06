@@ -574,7 +574,7 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
         <div style={S.logo}><span style={{ fontSize: 22 }}>🚛</span> TRAILER TRACK</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <nav style={S.nav}>
-            {[["dashboard","Dashboard"],["all","All VINs"],["shipped","Shipped"],["scan","Scan VIN"],["add","Register"],["import","Import Sheet"]]
+            {[["dashboard","Dashboard"],["all","All VINs"],["scan","Scan VIN"],["add","Register"],["import","Import Sheet"]]
               .filter(([id]) => isViewer ? !["scan","add","import"].includes(id) : true)
               .map(([id, label]) => (
               <button key={id} style={S.navBtn(view === id || (view === "detail" && id === "dashboard"))}
@@ -626,6 +626,13 @@ create policy "allow all" on trailer_history for all using (true) with check (tr
                     <div style={{ fontSize: 20, fontWeight: 800, color: stationCounts[s.id] ? s.color : "#3A4F63", marginTop: 2 }}>{stationCounts[s.id] || 0}</div>
                   </button>
                 ))}
+                {/* Shipped button */}
+                <button onClick={() => setActiveStation("shipped")}
+                  style={{ textAlign: "center", padding: "12px 18px", background: activeStation === "shipped" ? "#2980B922" : "#0F1923", borderRadius: 8, border: `2px solid ${activeStation === "shipped" ? "#2980B9" : trailers.filter(t => t.current_station === "shipped").length ? "#2980B955" : "#1E3048"}`, cursor: "pointer", transition: "all 0.15s", minWidth: 90 }}>
+                  <div style={{ fontSize: 20 }}>🚚</div>
+                  <div style={{ fontSize: 11, color: "#8FA0B0", marginTop: 2 }}>Shipped</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: trailers.filter(t => t.current_station === "shipped").length ? "#2980B9" : "#3A4F63", marginTop: 2 }}>{trailers.filter(t => t.current_station === "shipped").length}</div>
+                </button>
               </div>
             </div>
 
